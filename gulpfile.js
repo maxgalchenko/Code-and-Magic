@@ -1,16 +1,11 @@
 const { watch, src, dest, series, parallel } = require("gulp");
+const fsPromises = require('fs/promises');
 const browserSync = require("browser-sync").create();
 // const uglify = require("gulp-uglify");
 const rename = require("gulp-rename");
-const del = require("del");
 const postcss = require("gulp-postcss");
-const sass = require("gulp-sass");
-const autoprefixer = require("autoprefixer");
-const cssnano = require("cssnano");
 const webpackStream = require("webpack-stream");
 const htmlmin = require("gulp-htmlmin");
-const imagemin = require("gulp-imagemin");
-const webp = require("imagemin-webp");
 const extReplace = require("gulp-ext-replace");
 
 const CONFIG = {
@@ -33,9 +28,7 @@ const CONFIG = {
 function cssTask(done) {
   src(CONFIG.src.css)
     .pipe(rename({ suffix: ".bundle" }))
-    .pipe(postcss([autoprefixer(), cssnano()]))
     .pipe(dest(CONFIG.docs.base));
-
   done();
 }
 // commented becouse i need to see all files js(modules)
@@ -80,25 +73,20 @@ function templateTask(done) {
   done();
 }
 
-function imagesTask(done) {
-  src(CONFIG.src.images)
-    .pipe(imagemin())
-    .pipe(dest(CONFIG.docs.images));
-  done();
+function imagesTask() {
+  return fsPromises.cp('./src/img', './docs/img', { recursive: true, force: true });
 }
 
-function imagesTaskWebp(done) {
-  src(CONFIG.src.pngJpeg)
-    .pipe(
-      imagemin([
-        webp({
-          quality: 75
-        })
-      ])
-    )
-    .pipe(extReplace(".webp"))
-    .pipe(dest(CONFIG.docs.images));
-  done();
+function imagesTaskWebp() {
+  return Promise.all([
+    import('gulp-imagemin'),
+    import('imagemin-webp')
+  ]).then(([{ default: gulpImagemin }, { default: imageminWebp }]) => {
+    return src(CONFIG.src.pngJpeg)
+      .pipe(gulpImagemin([imageminWebp({ quality: 75 })]))
+      .pipe(extReplace(".webp"))
+      .pipe(dest(CONFIG.docs.images));
+  });
 }
 
 function liveReload(done) {
@@ -116,7 +104,8 @@ function reload(done) {
 }
 
 function cleanUp() {
-  return del([CONFIG.docs.base]);
+  // Use dynamic import to load ESM-only 'del' from CommonJS gulpfile
+  return import('del').then(({ deleteAsync }) => deleteAsync([CONFIG.docs.base]));
 }
 
 function favicon(done) {
@@ -134,16 +123,16 @@ function watchChanges() {
 }
 
 exports.clean = cleanUp;
-exports.dev = parallel(
-  // jsTask,
-  jsTaskAllFilesSeparated,
-  cssTask,
-  templateTask,
-  imagesTask,
-  imagesTaskWebp,
-  favicon,
-  watchChanges,
-  liveReload
+exports.dev = series(
+  cleanUp,
+  parallel(
+    jsTaskAllFilesSeparated,
+    cssTask,
+    templateTask,
+    imagesTask,
+    favicon
+  ),
+  parallel(watchChanges, liveReload)
 );
 exports.build = series(
   cleanUp,

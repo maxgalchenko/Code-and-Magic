@@ -68,6 +68,11 @@ Open http://localhost:3000
 
 - `npm test` – placeholder; no tests configured
 
+## Screenshots
+
+![Main](src/img/screenshots/main.png)
+![Character Setup](src/img/screenshots/character-setup.png)
+
 ---
 
 <div align="center">
